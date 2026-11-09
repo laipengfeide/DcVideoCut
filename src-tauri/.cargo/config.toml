@@ -1,0 +1,4 @@
+# 本机 rustc 为 1.89，锁定依赖解析时优先选择与当前工具链兼容的版本，
+# 避免解析到要求 rustc 1.90+ 的 tauri 2.12 / muda 0.20 等版本。
+[resolver]
+incompatible-rust-versions = "fallback"
