@@ -14,7 +14,7 @@ pub fn run() {
             let cache_dir = app.path().app_cache_dir()?;
             fs::create_dir_all(&cache_dir)?;
 
-            let db = auth::open_database(&data_dir)
+            let (db, db_crypto) = auth::open_database(&data_dir)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
 
             let exe_dir = std::env::current_exe()
@@ -23,7 +23,13 @@ pub fn run() {
                 .unwrap_or_else(|| std::path::PathBuf::from("."));
             let resource_dir = app.path().resource_dir().ok();
 
-            app.manage(commands::AppState::new(db, cache_dir, exe_dir, resource_dir));
+            app.manage(commands::AppState::new(
+                db,
+                db_crypto,
+                cache_dir,
+                exe_dir,
+                resource_dir,
+            ));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

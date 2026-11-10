@@ -20,6 +20,7 @@ pub struct FfmpegCache {
 
 pub struct AppState {
     pub db: Mutex<Connection>,
+    pub db_crypto: Mutex<auth::DbCrypto>,
     pub identity: Mutex<Identity>,
     pub jobs: Mutex<HashMap<String, Child>>,
     pub ffmpeg: Mutex<FfmpegCache>,
@@ -31,12 +32,14 @@ pub struct AppState {
 impl AppState {
     pub fn new(
         db: Connection,
+        db_crypto: auth::DbCrypto,
         cache_dir: PathBuf,
         exe_dir: PathBuf,
         resource_dir: Option<PathBuf>,
     ) -> Self {
         Self {
             db: Mutex::new(db),
+            db_crypto: Mutex::new(db_crypto),
             identity: Mutex::new(Identity::Guest),
             jobs: Mutex::new(HashMap::new()),
             ffmpeg: Mutex::new(FfmpegCache {
@@ -48,6 +51,15 @@ impl AppState {
             exe_dir,
             resource_dir,
         }
+    }
+}
+
+/// 把内存数据库重新加密落盘（每次写库后调用）
+fn persist_db(state: &AppState) {
+    let conn = state.db.lock().unwrap();
+    let crypto = state.db_crypto.lock().unwrap();
+    if let Err(e) = crypto.save(&conn) {
+        eprintln!("[db] 保存加密数据库失败: {e}");
     }
 }
 
@@ -226,6 +238,7 @@ pub fn app_bootstrap(state: State<'_, AppState>) -> SessionView {
             *state.identity.lock().unwrap() = identity;
         }
     }
+    persist_db(&state);
     build_session_view(&state)
 }
 
@@ -240,6 +253,7 @@ pub fn auth_register(
         auth::register(&conn, &username, &password)?
     };
     *state.identity.lock().unwrap() = identity;
+    persist_db(&state);
     Ok(build_session_view(&state))
 }
 
@@ -254,6 +268,7 @@ pub fn auth_login(
         auth::login(&conn, &username, &password)?
     };
     *state.identity.lock().unwrap() = identity;
+    persist_db(&state);
     Ok(build_session_view(&state))
 }
 
@@ -270,18 +285,22 @@ pub fn auth_logout(state: State<'_, AppState>) -> SessionView {
         let _ = auth::logout(&conn);
     }
     *state.identity.lock().unwrap() = Identity::Guest;
+    persist_db(&state);
     build_session_view(&state)
 }
 
 #[tauri::command]
 pub fn remember_out_dir(state: State<'_, AppState>, path: String) -> Result<(), String> {
-    let conn = state.db.lock().unwrap();
-    conn.execute(
-        "INSERT INTO settings (key, value) VALUES ('out_dir', ?1)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        params![path],
-    )
-    .map_err(|e| e.to_string())?;
+    {
+        let conn = state.db.lock().unwrap();
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES ('out_dir', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![path],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    persist_db(&state);
     Ok(())
 }
 
@@ -702,6 +721,7 @@ fn save_frames_blocking(
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             params![out_dir.clone()],
         );
+    persist_db(&state);
 
     Ok(SaveResult {
         saved,
@@ -900,6 +920,7 @@ fn export_segments_blocking(
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             params![out_dir.clone()],
         );
+    persist_db(&state);
 
     Ok(ExportResult {
         outputs,

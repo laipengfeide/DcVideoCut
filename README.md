@@ -27,7 +27,7 @@
 | 注册用户 | 不限 | 不限 | 2 GB |
 
 - 注册 / 登录基于 **Argon2** 密码哈希，会话 token 持久化 30 天
-- 数据库为 SQLite，位于 `%APPDATA%\com.dc.videocut\dcvc.db`
+- 数据库为 SQLite，位于 `%APPDATA%\com.dc.videocut\dc_video_cut.db`，**落盘内容为 AES-256-GCM 加密密文**（明文仅存在于内存）
 - 记住上次输出目录，下次打开自动带出
 
 ## 环境要求
